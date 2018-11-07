@@ -8,11 +8,12 @@ android {
         minSdkVersion rootProject.ext.android.minSdkVersion
         targetSdkVersion rootProject.ext.android.targetSdkVersion
     }
+
+    resourcePrefix 'permission'
 }
 
 dependencies {
-    compile rootProject.ext.dependencies.appcompat
-    compile rootProject.ext.dependencies.alertdialog
+    implementation rootProject.ext.dependencies.fragment
 }
 
-apply from: "maven.gradle"
+apply from: "https://raw.githubusercontent.com/yanzhenjie/bintray/master/maven.gradle"

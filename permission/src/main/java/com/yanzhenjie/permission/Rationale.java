@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Yan Zhenjie
+ * Copyright © Yan Zhenjie
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,19 @@
  */
 package com.yanzhenjie.permission;
 
+import android.content.Context;
+
 /**
  * Created by Yan Zhenjie on 2016/9/10.
  */
-public interface Rationale extends Cancelable {
+public interface Rationale<T> {
 
     /**
-     * Go request permission.
+     * Show rationale to user.
+     *
+     * @param context  context.
+     * @param data     the data.
+     * @param executor executor.
      */
-    void resume();
-
+    void showRationale(Context context, T data, RequestExecutor executor);
 }

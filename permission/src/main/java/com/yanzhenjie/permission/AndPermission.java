@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Yan Zhenjie
+ * Copyright © Yan Zhenjie
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,20 @@
  */
 package com.yanzhenjie.permission;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
-import android.util.Log;
+import android.support.v4.app.Fragment;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
+import com.yanzhenjie.permission.checker.PermissionChecker;
+import com.yanzhenjie.permission.checker.StandardChecker;
+import com.yanzhenjie.permission.runtime.Runtime;
+import com.yanzhenjie.permission.source.ContextSource;
+import com.yanzhenjie.permission.source.FragmentSource;
+import com.yanzhenjie.permission.source.Source;
+import com.yanzhenjie.permission.source.SupportFragmentSource;
+
+import java.io.File;
 import java.util.List;
 
 /**
@@ -33,72 +36,45 @@ import java.util.List;
  */
 public class AndPermission {
 
-    private static final String TAG = "AndPermission";
+    /**
+     * With {@link Fragment}.
+     *
+     * @param fragment {@link Fragment}.
+     * @return {@link Options}.
+     */
+    public static Options with(Fragment fragment) {
+        return new Options(new SupportFragmentSource(fragment));
+    }
 
     /**
-     * Check if the calling context has a set of permissions.
+     * With {@link android.app.Fragment}.
      *
-     * @param context     {@link Context}.
-     * @param permissions one or more permissions.
-     * @return true, other wise is false.
+     * @param fragment {@link android.app.Fragment}.
+     * @return {@link Options}.
      */
-    public static boolean hasPermission(@NonNull Context context, @NonNull String... permissions) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+    public static Options with(android.app.Fragment fragment) {
+        return new Options(new FragmentSource(fragment));
+    }
 
-        for (String permission : permissions) {
-            boolean hasPermission = (ContextCompat.checkSelfPermission(context, permission) == PackageManager
-                    .PERMISSION_GRANTED);
-            if (!hasPermission) return false;
-        }
-        return true;
+    /**
+     * With context.
+     *
+     * @param context {@link Context}.
+     * @return {@link Options}.
+     */
+    public static Options with(Context context) {
+        return new Options(new ContextSource(context));
     }
 
     /**
      * Some privileges permanently disabled, may need to set up in the execute.
      *
-     * @param activity          {@link Activity}.
+     * @param fragment          {@link Fragment}.
      * @param deniedPermissions one or more permissions.
      * @return true, other wise is false.
      */
-    public static boolean hasAlwaysDeniedPermission(@NonNull Activity activity, @NonNull List<String>
-            deniedPermissions) {
-        for (String deniedPermission : deniedPermissions) {
-            if (!PermissionUtils.shouldShowRationalePermissions(activity, deniedPermission)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Get default rationale dialog.
-     *
-     * @param context   {@link Context}.
-     * @param rationale {@link Rationale}.
-     * @return {@link RationaleDialog}.
-     */
-    public static
-    @NonNull
-    RationaleDialog rationaleDialog(@NonNull Context context, Rationale rationale) {
-        return new RationaleDialog(context, rationale);
-    }
-
-    /**
-     * Some privileges permanently disabled, may need to set up in the execute.
-     *
-     * @param fragment          {@link android.support.v4.app.Fragment}.
-     * @param deniedPermissions one or more permissions.
-     * @return true, other wise is false.
-     */
-    public static boolean hasAlwaysDeniedPermission(@NonNull android.support.v4.app.Fragment fragment, @NonNull
-            List<String>
-            deniedPermissions) {
-        for (String deniedPermission : deniedPermissions) {
-            if (!PermissionUtils.shouldShowRationalePermissions(fragment, deniedPermission)) {
-                return true;
-            }
-        }
-        return false;
+    public static boolean hasAlwaysDeniedPermission(Fragment fragment, List<String> deniedPermissions) {
+        return hasAlwaysDeniedPermission(new SupportFragmentSource(fragment), deniedPermissions);
     }
 
     /**
@@ -108,10 +84,27 @@ public class AndPermission {
      * @param deniedPermissions one or more permissions.
      * @return true, other wise is false.
      */
-    public static boolean hasAlwaysDeniedPermission(@NonNull android.app.Fragment fragment, @NonNull String...
-            deniedPermissions) {
-        for (String deniedPermission : deniedPermissions) {
-            if (!PermissionUtils.shouldShowRationalePermissions(fragment, deniedPermission)) {
+    public static boolean hasAlwaysDeniedPermission(android.app.Fragment fragment, List<String> deniedPermissions) {
+        return hasAlwaysDeniedPermission(new FragmentSource(fragment), deniedPermissions);
+    }
+
+    /**
+     * Some privileges permanently disabled, may need to set up in the execute.
+     *
+     * @param context           {@link Context}.
+     * @param deniedPermissions one or more permissions.
+     * @return true, other wise is false.
+     */
+    public static boolean hasAlwaysDeniedPermission(Context context, List<String> deniedPermissions) {
+        return hasAlwaysDeniedPermission(new ContextSource(context), deniedPermissions);
+    }
+
+    /**
+     * Has always been denied permission.
+     */
+    private static boolean hasAlwaysDeniedPermission(Source source, List<String> deniedPermissions) {
+        for (String permission : deniedPermissions) {
+            if (!source.isShowRationalePermission(permission)) {
                 return true;
             }
         }
@@ -119,281 +112,197 @@ public class AndPermission {
     }
 
     /**
-     * Get default setting dialog.
+     * Some privileges permanently disabled, may need to set up in the execute.
      *
-     * @param activity    {@link Activity}.
-     * @param requestCode requestCode for {@code startActivityForResult(Intent, int)}.
-     * @return {@link SettingDialog}.
+     * @param fragment          {@link Fragment}.
+     * @param deniedPermissions one or more permissions.
+     * @return true, other wise is false.
      */
-    public static
-    @NonNull
-    SettingDialog defaultSettingDialog(@NonNull Activity activity, int requestCode) {
-        return new SettingDialog(activity, new SettingExecutor(activity, requestCode));
+    public static boolean hasAlwaysDeniedPermission(Fragment fragment, String... deniedPermissions) {
+        return hasAlwaysDeniedPermission(new SupportFragmentSource(fragment), deniedPermissions);
     }
 
     /**
-     * Get default setting dialog.
+     * Some privileges permanently disabled, may need to set up in the execute.
      *
-     * @param fragment    {@link android.support.v4.app.Fragment}.
-     * @param requestCode requestCode for {@code startActivityForResult(Intent, int)}.
-     * @return {@link SettingDialog}.
+     * @param fragment          {@link android.app.Fragment}.
+     * @param deniedPermissions one or more permissions.
+     * @return true, other wise is false.
      */
-    public static
-    @NonNull
-    SettingDialog defaultSettingDialog(@NonNull android.support.v4.app.Fragment fragment, int
-            requestCode) {
-        return new SettingDialog(fragment.getActivity(), new SettingExecutor(fragment,
-                requestCode));
+    public static boolean hasAlwaysDeniedPermission(android.app.Fragment fragment, String... deniedPermissions) {
+        return hasAlwaysDeniedPermission(new FragmentSource(fragment), deniedPermissions);
     }
 
     /**
-     * Get default setting dialog.
+     * Some privileges permanently disabled, may need to set up in the execute.
      *
-     * @param fragment    {@link android.app.Fragment}.
-     * @param requestCode requestCode for {@code startActivityForResult(Intent, int)}.
-     * @return {@link SettingDialog}.
+     * @param context           {@link Context}.
+     * @param deniedPermissions one or more permissions.
+     * @return true, other wise is false.
      */
-    public static
-    @NonNull
-    SettingDialog defaultSettingDialog(@NonNull android.app.Fragment fragment, int requestCode) {
-        return new SettingDialog(fragment.getActivity(), new SettingExecutor(fragment,
-                requestCode));
+    public static boolean hasAlwaysDeniedPermission(Context context, String... deniedPermissions) {
+        return hasAlwaysDeniedPermission(new ContextSource(context), deniedPermissions);
     }
 
     /**
-     * Get define setting dialog setting object.
-     *
-     * @param activity    {@link Activity}.
-     * @param requestCode requestCode for {@code startActivityForResult(Intent, int)}.
-     * @return {@link SettingService}.
+     * Has always been denied permission.
      */
-    public static
-    @NonNull
-    SettingService defineSettingDialog(@NonNull Activity activity, int requestCode) {
-        return new SettingExecutor(activity, requestCode);
-    }
-
-    /**
-     * Get define setting dialog setting object.
-     *
-     * @param fragment    {@link android.support.v4.app.Fragment}.
-     * @param requestCode requestCode for {@code startActivityForResult(Intent, int)}.
-     * @return {@link SettingService}.
-     */
-    public static
-    @NonNull
-    SettingService defineSettingDialog(@NonNull android.support.v4.app.Fragment fragment, int
-            requestCode) {
-        return new SettingExecutor(fragment, requestCode);
-    }
-
-    /**
-     * Get define setting dialog setting object.
-     *
-     * @param fragment    {@link android.app.Fragment}.
-     * @param requestCode requestCode for {@code startActivityForResult(Intent, int)}.
-     * @return {@link SettingService}.
-     */
-    public static
-    @NonNull
-    SettingService defineSettingDialog(@NonNull android.app.Fragment fragment, int requestCode) {
-        return new SettingExecutor(fragment, requestCode);
-    }
-
-    /**
-     * In the Activity.
-     *
-     * @param activity {@link Activity}.
-     * @return {@link Permission}.
-     */
-    public static
-    @NonNull
-    Permission with(@NonNull Activity activity) {
-        return new DefaultPermission(activity);
-    }
-
-    /**
-     * In the Activity.
-     *
-     * @param fragment {@link android.support.v4.app.Fragment}.
-     * @return {@link Permission}.
-     */
-    public static
-    @NonNull
-    Permission with(@NonNull android.support.v4.app.Fragment fragment) {
-        return new DefaultPermission(fragment);
-    }
-
-    /**
-     * In the Activity.
-     *
-     * @param fragment {@link android.app.Fragment}.
-     * @return {@link Permission}.
-     */
-    public static
-    @NonNull
-    Permission with(@NonNull android.app.Fragment fragment) {
-        return new DefaultPermission(fragment);
-    }
-
-    /**
-     * Request permissions in the activity.
-     *
-     * @param activity    {@link Activity}.
-     * @param requestCode request code.
-     * @param permissions all permissions.
-     */
-    public static void send(@NonNull Activity activity, int requestCode, @NonNull String... permissions) {
-        with(activity).requestCode(requestCode).permission(permissions).send();
-    }
-
-    /**
-     * Request permissions in the activity.
-     *
-     * @param fragment    {@link android.support.v4.app.Fragment}.
-     * @param requestCode request code.
-     * @param permissions all permissions.
-     */
-    public static void send(@NonNull android.support.v4.app.Fragment fragment, int requestCode, @NonNull String...
-            permissions) {
-        with(fragment).requestCode(requestCode).permission(permissions).send();
-    }
-
-    /**
-     * Request permissions in the activity.
-     *
-     * @param fragment    {@link android.app.Fragment}.
-     * @param requestCode request code.
-     * @param permissions all permissions.
-     */
-    public static void send(@NonNull android.app.Fragment fragment, int requestCode, @NonNull String...
-            permissions) {
-        with(fragment).requestCode(requestCode).permission(permissions).send();
-    }
-
-    /**
-     * Parse the request results.
-     *
-     * @param activity     {@link Activity}.
-     * @param requestCode  request code.
-     * @param permissions  all permissions.
-     * @param grantResults results.
-     */
-    public static void onRequestPermissionsResult(@NonNull Activity activity, int requestCode, @NonNull String[]
-            permissions, int[] grantResults) {
-        callbackAnnotation(activity, requestCode, permissions, grantResults);
-    }
-
-    /**
-     * Parse the request results.
-     *
-     * @param fragment     {@link android.support.v4.app.Fragment}.
-     * @param requestCode  request code.
-     * @param permissions  all permissions.
-     * @param grantResults results.
-     */
-    public static void onRequestPermissionsResult(@NonNull android.support.v4.app.Fragment fragment, int
-            requestCode,
-                                                  @NonNull String[] permissions, int[] grantResults) {
-        callbackAnnotation(fragment, requestCode, permissions, grantResults);
-    }
-
-    /**
-     * Parse the request results.
-     *
-     * @param fragment     {@link android.app.Fragment}.
-     * @param requestCode  request code.
-     * @param permissions  all permissions.
-     * @param grantResults results.
-     */
-    public static void onRequestPermissionsResult(@NonNull android.app.Fragment fragment, int requestCode,
-                                                  @NonNull String[] permissions, int[] grantResults) {
-        callbackAnnotation(fragment, requestCode, permissions, grantResults);
-    }
-
-    /**
-     * Parse the request results.
-     *
-     * @param o            {@link Activity} or {@link android.support.v4.app.Fragment} or
-     *                     {@link android.app.Fragment}.
-     * @param requestCode  request code.
-     * @param permissions  all permissions.
-     * @param grantResults results.
-     */
-    private static void callbackAnnotation(@NonNull Object o, int requestCode, @NonNull String[] permissions, int[]
-            grantResults) {
-        List<String> grantedList = new ArrayList<>();
-        List<String> deniedList = new ArrayList<>();
-        for (int i = 0; i < permissions.length; i++) {
-            if (grantResults[i] == PackageManager.PERMISSION_GRANTED)
-                grantedList.add(permissions[i]);
-            else
-                deniedList.add(permissions[i]);
-        }
-
-        boolean isAllGrant = deniedList.isEmpty();
-
-        Class<? extends Annotation> clazz = isAllGrant ? PermissionYes.class : PermissionNo.class;
-        Method[] methods = findMethodForRequestCode(o.getClass(), clazz, requestCode);
-        if (methods.length == 0) {
-            Log.e(TAG, "Not found the callback method, do you forget @PermissionYes or @permissionNo" +
-                    " for callback method ? Or you can use PermissionListener.");
-        } else
-            try {
-                for (Method method : methods) {
-                    if (!method.isAccessible()) method.setAccessible(true);
-                    method.invoke(o, isAllGrant ? grantedList : deniedList);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
+    private static boolean hasAlwaysDeniedPermission(Source source, String... deniedPermissions) {
+        for (String permission : deniedPermissions) {
+            if (!source.isShowRationalePermission(permission)) {
+                return true;
             }
-    }
-
-    private static <T extends Annotation> Method[] findMethodForRequestCode(@NonNull Class<?> source, @NonNull
-            Class<T> annotation, int requestCode) {
-        List<Method> methods = new ArrayList<>(1);
-        for (Method method : source.getDeclaredMethods())
-            if (method.isAnnotationPresent(annotation))
-                if (isSameRequestCode(method, annotation, requestCode))
-                    methods.add(method);
-        return methods.toArray(new Method[methods.size()]);
-    }
-
-    private static <T extends Annotation> boolean isSameRequestCode(@NonNull Method method, @NonNull Class<T>
-            annotation, int requestCode) {
-        if (PermissionYes.class.equals(annotation))
-            return method.getAnnotation(PermissionYes.class).value() == requestCode;
-        else if (PermissionNo.class.equals(annotation))
-            return method.getAnnotation(PermissionNo.class).value() == requestCode;
+        }
         return false;
     }
 
     /**
-     * Parse the request results.
+     * Create a service that opens the permission setting page.
      *
-     * @param requestCode  request code.
-     * @param permissions  one or more permissions.
-     * @param grantResults results.
-     * @param listener     {@link PermissionListener}.
+     * @param fragment {@link Fragment}.
+     * @return {@link Setting}.
+     * @deprecated use {@link Runtime#setting()} instead. Such as: {@code AndPermission.with().runtime().setting()}.
      */
-    public static void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, int[]
-            grantResults, @NonNull PermissionListener listener) {
-        List<String> grantedList = new ArrayList<>();
-        List<String> deniedList = new ArrayList<>();
-        for (int i = 0; i < permissions.length; i++) {
-            if (grantResults[i] == PackageManager.PERMISSION_GRANTED)
-                grantedList.add(permissions[i]);
-            else
-                deniedList.add(permissions[i]);
-        }
+    @Deprecated
+    public static Setting permissionSetting(Fragment fragment) {
+        return AndPermission.with(fragment).runtime().setting();
+    }
 
-        if (deniedList.isEmpty())
-            listener.onSucceed(requestCode, grantedList);
-        else
-            listener.onFailed(requestCode, deniedList);
+    /**
+     * Create a service that opens the permission setting page.
+     *
+     * @param fragment {@link android.app.Fragment}.
+     * @return {@link Setting}.
+     * @deprecated use {@link Runtime#setting()} instead. Such as: {@code AndPermission.with().runtime().setting()}.
+     */
+    @Deprecated
+    public static Setting permissionSetting(android.app.Fragment fragment) {
+        return AndPermission.with(fragment).runtime().setting();
+    }
+
+    /**
+     * Create a service that opens the permission setting page.
+     *
+     * @param context {@link Context}.
+     * @return {@link Setting}.
+     * @deprecated use {@link Runtime#setting()} instead. Such as: {@code AndPermission.with().runtime().setting()}.
+     */
+    @Deprecated
+    public static Setting permissionSetting(Context context) {
+        return AndPermission.with(context).runtime().setting();
+    }
+
+    /**
+     * Classic permission checker.
+     */
+    private static final PermissionChecker PERMISSION_CHECKER = new StandardChecker();
+
+    /**
+     * Judgment already has the target permission.
+     *
+     * @param fragment    {@link Fragment}.
+     * @param permissions one or more permissions.
+     * @return true, other wise is false.
+     */
+    public static boolean hasPermissions(Fragment fragment, String... permissions) {
+        return hasPermissions(fragment.getContext(), permissions);
+    }
+
+    /**
+     * Judgment already has the target permission.
+     *
+     * @param fragment    {@link android.app.Fragment}.
+     * @param permissions one or more permissions.
+     * @return true, other wise is false.
+     */
+    public static boolean hasPermissions(android.app.Fragment fragment, String... permissions) {
+        return hasPermissions(fragment.getActivity(), permissions);
+    }
+
+    /**
+     * Judgment already has the target permission.
+     *
+     * @param context     {@link Context}.
+     * @param permissions one or more permissions.
+     * @return true, other wise is false.
+     */
+    public static boolean hasPermissions(Context context, String... permissions) {
+        return PERMISSION_CHECKER.hasPermission(context, permissions);
+    }
+
+    /**
+     * Judgment already has the target permission.
+     *
+     * @param fragment    {@link Fragment}.
+     * @param permissions one or more permission groups.
+     * @return true, other wise is false.
+     */
+    public static boolean hasPermissions(Fragment fragment, String[]... permissions) {
+        return hasPermissions(fragment.getContext(), permissions);
+    }
+
+    /**
+     * Judgment already has the target permission.
+     *
+     * @param fragment    {@link android.app.Fragment}.
+     * @param permissions one or more permission groups.
+     * @return true, other wise is false.
+     */
+    public static boolean hasPermissions(android.app.Fragment fragment, String[]... permissions) {
+        return hasPermissions(fragment.getActivity(), permissions);
+    }
+
+    /**
+     * Judgment already has the target permission.
+     *
+     * @param context     {@link Context}.
+     * @param permissions one or more permission groups.
+     * @return true, other wise is false.
+     */
+    public static boolean hasPermissions(Context context, String[]... permissions) {
+        for (String[] permission : permissions) {
+            boolean hasPermission = PERMISSION_CHECKER.hasPermission(context, permission);
+            if (!hasPermission) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Get compatible Android 7.0 and lower versions of Uri.
+     *
+     * @param fragment {@link Fragment}.
+     * @param file     apk file.
+     * @return uri.
+     */
+    public static Uri getFileUri(Fragment fragment, File file) {
+        return getFileUri(fragment.getContext(), file);
+    }
+
+    /**
+     * Get compatible Android 7.0 and lower versions of Uri.
+     *
+     * @param fragment {@link android.app.Fragment}.
+     * @param file     apk file.
+     * @return uri.
+     */
+    public static Uri getFileUri(android.app.Fragment fragment, File file) {
+        return getFileUri(fragment.getActivity(), file);
+    }
+
+    /**
+     * Get compatible Android 7.0 and lower versions of Uri.
+     *
+     * @param context {@link Context}.
+     * @param file    apk file.
+     * @return uri.
+     */
+    public static Uri getFileUri(Context context, File file) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            return FileProvider.getUriForFile(context, context.getPackageName() + ".file.path.share", file);
+        }
+        return Uri.fromFile(file);
     }
 
     private AndPermission() {
     }
-
 }
